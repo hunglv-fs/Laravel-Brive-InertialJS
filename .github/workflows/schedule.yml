@@ -1,0 +1,17 @@
+name: Scheduled Job
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # chạy mỗi 5 phút (theo UTC)
+  workflow_dispatch: # cho phép chạy thủ công
+
+jobs:
+  scheduled-task:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run a script
+        run: echo "This job runs every 5 minutes - $(date)"
