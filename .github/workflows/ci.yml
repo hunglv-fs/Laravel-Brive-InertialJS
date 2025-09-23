@@ -5,8 +5,59 @@ on:
     branches: [ "master" ]
 
 jobs:
-  laravel-ci:
+  lint:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, bcmath, pdo_mysql
+
+      - name: Install PHP Dependencies
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+
+      - name: Install QA tools
+        run: composer require --dev phpstan/phpstan friendsofphp/php-cs-fixer
+
+      - name: Run PHPStan
+        run: vendor/bin/phpstan analyse --memory-limit=1G || true
+
+      - name: Run PHP-CS-Fixer
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff || true
+
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Install PHP Dependencies
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+
+      - name: Install JS Dependencies
+        run: npm ci
+
+      - name: Build Frontend
+        run: npm run build --if-present
+
+      - name: Cache build artifacts
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [lint, build]
 
     services:
       mysql:
@@ -25,62 +76,42 @@ jobs:
           --health-retries=5
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.2'
-        extensions: mbstring, bcmath, pdo_mysql
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, bcmath, pdo_mysql
 
-    - name: Copy .env
-      run: php -r "file_exists('.env') || copy('.env.example', '.env');"
+      - name: Install PHP Dependencies
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
 
-    - name: Install PHP Dependencies
-      run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+      - name: Copy .env
+        run: cp .env.example .env
 
-    - name: Install JS Dependencies
-      run: npm install
+      - name: Generate key
+        run: php artisan key:generate
 
-    - name: Build Frontend
-      run: npm run build --if-present
+      - name: Directory Permissions
+        run: chmod -R 777 storage bootstrap/cache
 
-    - name: Generate key
-      run: php artisan key:generate
+      - name: Run migrations
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: laravel_test
+          DB_USERNAME: laravel
+          DB_PASSWORD: secret
+        run: php artisan migrate:fresh --seed --force
 
-    - name: Directory Permissions
-      run: chmod -R 777 storage bootstrap/cache
-
-    - name: Wait for MySQL
-      run: |
-        sudo apt-get install -y mysql-client
-        until mysql -h 127.0.0.1 -u laravel -psecret -e "SELECT 1"; do
-          echo "Waiting for MySQL..."
-          sleep 5
-        done
-
-    - name: Run migrations
-      env:
-        DB_CONNECTION: mysql
-        DB_HOST: 127.0.0.1
-        DB_PORT: 3306
-        DB_DATABASE: laravel_test
-        DB_USERNAME: laravel
-        DB_PASSWORD: secret
-      run: php artisan migrate:fresh --seed --force
-
-    - name: Run PHPStan
-      run: vendor/bin/phpstan analyse --memory-limit=1G || true
-
-    - name: Run PHP-CS-Fixer
-      run: vendor/bin/php-cs-fixer fix --dry-run --diff || true
-
-    - name: Run Tests
-      env:
-        DB_CONNECTION: mysql
-        DB_HOST: 127.0.0.1
-        DB_PORT: 3306
-        DB_DATABASE: laravel_test
-        DB_USERNAME: laravel
-        DB_PASSWORD: secret
-      run: php artisan test --coverage-clover=coverage.xml
+      - name: Run Tests
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: laravel_test
+          DB_USERNAME: laravel
+          DB_PASSWORD: secret
+        run: php artisan test --coverage-clover=coverage.xml
