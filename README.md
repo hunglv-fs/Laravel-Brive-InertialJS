@@ -31,6 +31,9 @@
 - Mysql
 - Apache
 # Installation
+
+
+### Set up project
 ``` bash
 git clone https://github.com/erikwibowo/Laravel-Brive.git
 cd Laravel-Brive
@@ -53,6 +56,14 @@ START THE SERVER
 npm run dev
 php artisan serve
 ```
+
+### Set up docker
+``` bash 
+docker-compose up -d
+```
+Web : localhost:8080
+PHPMyAdmin : localhost:8081
+
 ## Login With
 ### Superadmin
 ``` bash
